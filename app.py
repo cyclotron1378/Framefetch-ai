@@ -179,82 +179,115 @@ def process_video(uploaded_file):
 with st.sidebar:
     st.markdown('<div class="logo-text">FrameFetch AI</div>', unsafe_allow_html=True)
     
-    st.markdown("<div class='menu-item active'>➕ Upload Video</div>", unsafe_allow_html=True)
-    st.markdown("<div class='menu-item'>📁 Library</div>", unsafe_allow_html=True)
-    
-    if len(st.session_state.library) > 0:
-        st.markdown("<div style='padding: 0 1rem; color: #9ca3af; font-size: 0.85rem; margin-top: 1rem; font-weight: 600;'>PREVIOUS VIDEOS</div>", unsafe_allow_html=True)
-        for idx, vid in enumerate(st.session_state.library):
-            if st.button(f"🎥 {vid.get('name', 'Video')} (Library)", key=f"lib_{idx}", use_container_width=True):
-                curr = st.session_state.video_data.copy()
-                st.session_state.video_data = vid.copy()
-                st.session_state.library[idx] = curr
-                if hasattr(st, "rerun"): st.rerun()
-                else: st.experimental_rerun()
-                
+    st.markdown("<div style='color: #9ca3af; font-size: 0.85rem; font-weight: 600; margin-bottom:0.5rem;'>NAVIGATION</div>", unsafe_allow_html=True)
+    page = st.radio("Nav", ["Upload & Search", "Video Library"], label_visibility="collapsed")
     st.markdown("<br>", unsafe_allow_html=True)
     
-    uploaded_video = st.file_uploader("Drop Video File Here", type=["mp4", "mov", "avi"])
-    analyze_button = st.button("UPLOAD VIDEO", type="primary", use_container_width=True)
-
-    if analyze_button and uploaded_video:
-        process_video(uploaded_video)
-
-    if st.session_state.video_data["path"]:
-        st.markdown("<br><div style='color:#9ca3af; font-size:0.85rem; margin-bottom:0.5rem; font-weight:600;'>Active Uploads</div>", unsafe_allow_html=True)
-        st.progress(100, text="Ready - 100%")
-        if st.button("Clear Session", use_container_width=True):
-            if os.path.exists(st.session_state.video_data["path"]):
-                os.remove(st.session_state.video_data["path"])
-            st.session_state.video_data = {
-                "embeddings": None, "timestamps": None, "thumbnails": [],
-                "path": None, "transcript": None, "text_embeddings": None
-            }
-            if hasattr(st, "rerun"): st.rerun()
-            else: st.experimental_rerun()
+    if page == "Upload & Search":
+        uploaded_video = st.file_uploader("Drop Video File Here", type=["mp4", "mov", "avi"])
+        analyze_button = st.button("UPLOAD VIDEO", type="primary", use_container_width=True)
+    
+        if analyze_button and uploaded_video:
+            process_video(uploaded_video)
+    
+        if st.session_state.video_data["path"]:
+            st.markdown("<br><div style='color:#9ca3af; font-size:0.85rem; margin-bottom:0.5rem; font-weight:600;'>Active Video</div>", unsafe_allow_html=True)
+            st.progress(100, text="Ready - 100%")
+            if st.button("Clear Active Video", use_container_width=True):
+                st.session_state.video_data = {
+                    "name": None, "embeddings": None, "timestamps": None, "thumbnails": [],
+                    "path": None, "transcript": None, "text_embeddings": None
+                }
+                if hasattr(st, "rerun"): st.rerun()
+                else: st.experimental_rerun()
 
 # Main Interface
-if st.session_state.video_data["path"]:
-    # 1. Video Player
-    video_name = "Urban Exploration" # Fallback nice name
-    if uploaded_video:
-        video_name = os.path.splitext(uploaded_video.name)[0].replace("_", " ").title()
+if page == "Upload & Search":
+    if st.session_state.video_data["path"]:
+        # 1. Video Player
+        video_name = st.session_state.video_data.get("name") or "Unknown Video"
+        video_name = os.path.splitext(video_name)[0].replace("_", " ").title()
+            
+        st.video(st.session_state.video_data["path"], start_time=int(st.session_state.get('jump_time', 0)))
+        st.markdown(f"<h1 style='margin-top: 1rem;'>Current Video: <br><span style='color: #cbd5e1;'>{video_name}</span></h1>", unsafe_allow_html=True)
         
-    st.video(st.session_state.video_data["path"], start_time=int(st.session_state.get('jump_time', 0)))
-    st.markdown(f"<h1 style='margin-top: 1rem;'>Current Video: <br><span style='color: #cbd5e1;'>{video_name}</span></h1>", unsafe_allow_html=True)
-    
+        st.write("---")
+        
+        # 2. Search Bar
+        query = st.text_input("Search", placeholder="Search video library... (Type 'City Skyline' for results)", label_visibility="collapsed")
+        
+        # 3. Horizontal Results
+        if query:
+            query_visual_emb = vision_model.encode([query], convert_to_tensor=True)
+            visual_hits = util.semantic_search(query_visual_emb, st.session_state.video_data["embeddings"], top_k=5)[0]
+            
+            query_text_emb = text_model.encode([query], convert_to_tensor=True)
+            audio_hits = util.semantic_search(query_text_emb, st.session_state.video_data["text_embeddings"], top_k=5)[0]
+            
+            # Audio match text if any
+            if audio_hits and audio_hits[0]["score"] > 0.28:
+                best_speech = st.session_state.video_data["transcript"][audio_hits[0]["corpus_id"]]
+                st.info(f"🎙️ **Speech Match ({int(best_speech['start'])}s):** {best_speech['text'].strip()}")
+                
+            cols = st.columns(5)
+            for idx, hit in enumerate(visual_hits):
+                frame_index = hit["corpus_id"]
+                start_time = st.session_state.video_data["timestamps"][frame_index]
+                score = round(hit["score"] * 100)
+                
+                with cols[idx]:
+                    st.markdown("<div class='clean-card'>", unsafe_allow_html=True)
+                    st.image(st.session_state.video_data["thumbnails"][frame_index], use_container_width=True)
+                    st.markdown(f"<div class='card-caption'>{int(start_time)}s · {score}% Match</div>", unsafe_allow_html=True)
+                    if st.button("Play", key=f"play_{idx}", use_container_width=True):
+                        st.session_state['jump_time'] = start_time
+                        if hasattr(st, "rerun"): st.rerun()
+                        else: st.experimental_rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.info("Upload a video from the sidebar to start searching.")
+
+elif page == "Video Library":
+    st.markdown("<h1>📚 Video Library</h1>", unsafe_allow_html=True)
+    st.write("Browse and manage all the videos you've analyzed during this session.")
     st.write("---")
     
-    # 2. Search Bar
-    query = st.text_input("Search", placeholder="Search video library... (Type 'City Skyline' for results)", label_visibility="collapsed")
+    all_videos = []
+    if st.session_state.video_data["path"]:
+        all_videos.append(st.session_state.video_data)
+    all_videos.extend(st.session_state.library)
     
-    # 3. Horizontal Results
-    if query:
-        query_visual_emb = vision_model.encode([query], convert_to_tensor=True)
-        visual_hits = util.semantic_search(query_visual_emb, st.session_state.video_data["embeddings"], top_k=5)[0]
-        
-        query_text_emb = text_model.encode([query], convert_to_tensor=True)
-        audio_hits = util.semantic_search(query_text_emb, st.session_state.video_data["text_embeddings"], top_k=5)[0]
-        
-        # Audio match text if any
-        if audio_hits and audio_hits[0]["score"] > 0.28:
-            best_speech = st.session_state.video_data["transcript"][audio_hits[0]["corpus_id"]]
-            st.info(f"🎙️ **Speech Match ({int(best_speech['start'])}s):** {best_speech['text'].strip()}")
-            
-        cols = st.columns(5)
-        for idx, hit in enumerate(visual_hits):
-            frame_index = hit["corpus_id"]
-            start_time = st.session_state.video_data["timestamps"][frame_index]
-            score = round(hit["score"] * 100)
-            
-            with cols[idx]:
-                st.markdown("<div class='clean-card'>", unsafe_allow_html=True)
-                st.image(st.session_state.video_data["thumbnails"][frame_index], use_container_width=True)
-                st.markdown(f"<div class='card-caption'>{int(start_time)}s · {score}% Match</div>", unsafe_allow_html=True)
-                if st.button("Play", key=f"play_{idx}", use_container_width=True):
-                    st.session_state['jump_time'] = start_time
-                    if hasattr(st, "rerun"): st.rerun()
-                    else: st.experimental_rerun()
+    if len(all_videos) == 0:
+        st.info("Your library is currently empty. Go to 'Upload & Search' to add a video!")
+    else:
+        # Show grid
+        cols = st.columns(3)
+        for idx, vid in enumerate(all_videos):
+            with cols[idx % 3]:
+                st.markdown("<div class='clean-card' style='margin-bottom: 1rem;'>", unsafe_allow_html=True)
+                if vid.get("thumbnails"):
+                    st.image(vid["thumbnails"][0], use_container_width=True)
+                v_name = os.path.splitext(vid.get('name', 'Unknown'))[0].replace('_', ' ').title()
+                st.markdown(f"<h4 style='margin: 0.5rem 0;'>{v_name}</h4>", unsafe_allow_html=True)
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Load", key=f"load_{idx}", use_container_width=True):
+                        if idx > 0: # it's from library
+                            curr = st.session_state.video_data.copy()
+                            st.session_state.video_data = st.session_state.library[idx-1].copy()
+                            st.session_state.library[idx-1] = curr
+                        if hasattr(st, "rerun"): st.rerun()
+                        else: st.experimental_rerun()
+                with c2:
+                    if st.button("Delete", key=f"del_{idx}", use_container_width=True, type="primary"):
+                        if idx == 0: # deleting active video
+                            st.session_state.video_data = {
+                                "name": None, "embeddings": None, "timestamps": None, "thumbnails": [],
+                                "path": None, "transcript": None, "text_embeddings": None
+                            }
+                        else:
+                            st.session_state.library.pop(idx-1)
+                        if hasattr(st, "rerun"): st.rerun()
+                        else: st.experimental_rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
-else:
-    st.info("Upload a video from the sidebar to start.")
