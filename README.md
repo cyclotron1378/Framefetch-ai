@@ -10,8 +10,9 @@
 
 - **🧠 Multi-Modal Search:** Type anything like "crowded train station" or "red jacket" to instantly find visually matching frames. 
 - **🎙️ Speech Understanding:** The system actively transcribes video speech and matches your query to spoken words.
+- **📚 Video Library:** Automatically stores your previously uploaded videos in the session for seamless context switching.
 - **⚡ Extremely Fast Processing:** Optimized to run performantly on CPU hardware using robust batching and efficient AI model variants.
-- **🎨 Premium Interface:** Beautifully crafted dark mode UI featuring micro-animations, glass cards, and a premium hero panel.
+- **🎨 Premium Interface:** Beautifully crafted clean mode UI featuring modern cards and no neon abstractions.
 - **▶️ Instant Playback:** Click any search hit (visual or speech) to jump straight to that exact moment in the video.
 
 ## 🤖 Models & Architecture

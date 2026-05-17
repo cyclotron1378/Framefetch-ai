@@ -67,6 +67,7 @@ st.markdown(
 
 if "video_data" not in st.session_state:
     st.session_state.video_data = {
+        "name": None,
         "embeddings": None,
         "timestamps": None,
         "thumbnails": [],
@@ -74,6 +75,8 @@ if "video_data" not in st.session_state:
         "transcript": None,
         "text_embeddings": None,
     }
+if "library" not in st.session_state:
+    st.session_state.library = []
 
 # --- MODEL LOADING (Optimized for CPU) ---
 @st.cache_resource
@@ -154,14 +157,18 @@ def process_video(uploaded_file):
         text_embeddings = torch.zeros((0, 384))
     st.success(f"Transcription done in {time.time() - t2:.1f}s ({len(transcript_segments)} segments)")
 
-    st.session_state.video_data.update({
+    if st.session_state.video_data.get("path") is not None:
+        st.session_state.library.append(st.session_state.video_data.copy())
+
+    st.session_state.video_data = {
+        "name": uploaded_file.name,
         "embeddings": embeddings,
         "timestamps": timestamps,
         "thumbnails": thumbnails,
         "path": video_path,
         "transcript": transcript_segments,
         "text_embeddings": text_embeddings,
-    })
+    }
 
     del frames
     gc.collect()
@@ -169,29 +176,23 @@ def process_video(uploaded_file):
 
 # --- LAYOUT & UI ---
 
-# Top Bar (Mock)
-st.markdown("""
-    <div class="top-bar">
-        🔍 &nbsp;&nbsp; 
-        <div class="user-profile">
-            👤 Alex R. ⌄
-        </div>
-        &nbsp;&nbsp; 🔔
-    </div>
-""", unsafe_allow_html=True)
-
 with st.sidebar:
     st.markdown('<div class="logo-text">FrameFetch AI</div>', unsafe_allow_html=True)
     
-    # Mock Menu to match design
-    st.markdown("""
-        <div class='menu-item active'>➕ Upload Video</div>
-        <div class='menu-item'>📁 Library</div>
-        <div class='menu-item'>📋 Projects</div>
-        <div class='menu-item'>📊 Analytics</div>
-        <div class='menu-item'>⚙️ Settings</div>
-        <br>
-    """, unsafe_allow_html=True)
+    st.markdown("<div class='menu-item active'>➕ Upload Video</div>", unsafe_allow_html=True)
+    st.markdown("<div class='menu-item'>📁 Library</div>", unsafe_allow_html=True)
+    
+    if len(st.session_state.library) > 0:
+        st.markdown("<div style='padding: 0 1rem; color: #9ca3af; font-size: 0.85rem; margin-top: 1rem; font-weight: 600;'>PREVIOUS VIDEOS</div>", unsafe_allow_html=True)
+        for idx, vid in enumerate(st.session_state.library):
+            if st.button(f"🎥 {vid.get('name', 'Video')} (Library)", key=f"lib_{idx}", use_container_width=True):
+                curr = st.session_state.video_data.copy()
+                st.session_state.video_data = vid.copy()
+                st.session_state.library[idx] = curr
+                if hasattr(st, "rerun"): st.rerun()
+                else: st.experimental_rerun()
+                
+    st.markdown("<br>", unsafe_allow_html=True)
     
     uploaded_video = st.file_uploader("Drop Video File Here", type=["mp4", "mov", "avi"])
     analyze_button = st.button("UPLOAD VIDEO", type="primary", use_container_width=True)
