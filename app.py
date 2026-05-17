@@ -2,7 +2,6 @@ import streamlit as st
 import cv2
 import torch
 import whisper
-from whisper.model import disable_sdpa
 import gc
 import numpy as np
 import tempfile
@@ -147,8 +146,7 @@ def process_video(uploaded_file):
 
     st.info("Step 3: Transcribing and embedding speech...")
     t2 = time.time()
-    with disable_sdpa():
-        audio_result = audio_model.transcribe(video_path, fp16=False)
+    audio_result = audio_model.transcribe(video_path, fp16=False)
     transcript_segments = audio_result.get('segments', [])
     transcript_texts = [segment['text'].strip() for segment in transcript_segments]
     if transcript_texts:
