@@ -1,0 +1,7 @@
+streamlit
+opencv-python
+torch
+openai-whisper
+numpy
+sentence-transformers
+Pillow
