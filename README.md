@@ -35,7 +35,7 @@ The backend and frontend are tightly integrated in Python, utilizing:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/FrameFetch_AI.git
+   git clone https://github.com/cyclotron1378/FrameFetch_AI.git
    cd FrameFetch_AI
    ```
 
